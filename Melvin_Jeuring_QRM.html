@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Melvin Jeuring - QRM Dashboard v3.0</title>
+    <style>
+        :root {
+            --kpn-green: #009900;
+            --kpn-light-green: #33cc33;
+            --bg-color: #0a0a0a;
+            --card-bg: #141414;
+            --text-main: #f0f0f0;
+            --text-muted: #888;
+            --border-color: #333;
+            --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+            --font-sans: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        /* --- LAYOUT FIX: VOLLEDIGE BREEDTE & VERDELING --- */
+        .dashboard-container {
+            /* Gebruik bijna de hele breedte, met een veilige marge */
+            width: 96%; 
+            max-width: 1800px; /* Cap op hele brede schermen zodat het leesbaar blijft */
+            margin: 0 auto;
+            
+            display: grid;
+            /* Hier herstellen we de verdeling.
+               minmax(320px, 1fr) = Linkerkolom is minimaal 320px, maar groeit mee als 1 deel.
+               2fr = Rechterkant is 2 delen. 
+               Resultaat: 1/3e links, 2/3e rechts -> Oogt als 3 gelijke kolommen.
+            */
+            grid-template-columns: minmax(320px, 1fr) 2fr; 
+            gap: 25px;
+            align-items: start;
+        }
+
+        .sidebar-col { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 25px; 
+        }
+        
+        .main-col { 
+            display: grid; 
+            /* De rechterkant (2/3e) splitsen we weer in twee gelijke delen */
+            grid-template-columns: 1fr 1fr; 
+            gap: 25px; 
+        }
+
+        /* --- Header --- */
+        header {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--kpn-green);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+
+        .brand { font-size: 1.5rem; font-weight: 800; letter-spacing: -1px; text-transform: uppercase; }
+        .brand span { color: var(--kpn-green); }
+        .system-status { font-family: var(--font-mono); font-size: 0.9rem; color: var(--kpn-green); display: flex; align-items: center; gap: 10px; }
+        .blink { animation: blinker 1.5s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        /* --- Cards --- */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 25px; /* Iets meer padding voor luchtige look */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: transform 0.2s, border-color 0.2s;
+            overflow: hidden; 
+        }
+        .card:hover { border-color: var(--kpn-green); transform: translateY(-2px); }
+
+        .card-header {
+            font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted);
+            margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #222; padding-bottom: 8px;
+        }
+
+        /* --- Zones --- */
+        .metrics-area { grid-column: span 1; }
+        .terminal-area { grid-column: span 1; }
+        .history-area { grid-column: span 2; }
+        
+        /* --- Profile --- */
+        .profile-photo {
+            width: 130px; height: 130px; 
+            background: #222; border-radius: 50%;
+            margin: 0 auto 20px auto; border: 2px solid var(--kpn-green);
+            display: block; object-fit: cover;
+        }
+        .avatar-placeholder {
+            width: 130px; height: 130px; background: #222; border-radius: 50%;
+            margin: 0 auto 20px auto; border: 2px solid var(--kpn-green);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem; color: var(--kpn-green);
+        }
+        .profile-name { text-align: center; font-size: 1.6rem; font-weight: bold; margin: 0; }
+        .profile-role { text-align: center; color: var(--kpn-green); font-family: var(--font-mono); font-size: 1rem; margin-bottom: 25px; }
+        .contact-info { font-size: 0.95rem; color: #ccc; }
+        .contact-item { margin-bottom: 10px; display: flex; gap: 12px; align-items: center; }
+
+        /* --- Metrics --- */
+        .skill-group { margin-bottom: 18px; }
+        .skill-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 6px; }
+        .progress-bg { background: #222; height: 10px; border-radius: 5px; overflow: hidden; }
+        .progress-fill { background: var(--kpn-green); height: 100%; width: 0%; transition: width 1.5s ease-out; }
+        .progress-fill.ai { background: linear-gradient(90deg, var(--kpn-green), #00ffcc); }
+
+        /* --- Terminal --- */
+        .terminal {
+            font-family: var(--font-sans); font-size: 1rem; color: #ddd;
+            height: 100%; min-height: 220px; line-height: 1.6;
+        }
+        .cursor { display: inline-block; width: 2px; height: 16px; background: var(--kpn-green); animation: blinker 1s infinite; margin-left: 2px;}
+        .highlight { color: var(--kpn-green); font-weight: bold; }
+
+        /* --- Timeline --- */
+        .timeline-item {
+            position: relative; padding-left: 25px; border-left: 2px solid #333;
+            margin-bottom: 25px; padding-bottom: 10px; cursor: pointer;
+            transition: background 0.2s; border-radius: 4px; padding: 12px 12px 12px 25px;
+        }
+        .timeline-item:hover { background: rgba(0, 153, 0, 0.05); }
+        .timeline-item::before {
+            content: ''; position: absolute; left: -6px; top: 18px;
+            width: 10px; height: 10px; background: var(--kpn-green); border-radius: 50%;
+        }
+        .timeline-date { font-family: var(--font-mono); font-size: 0.85rem; color: var(--kpn-green); }
+        .timeline-title { font-weight: bold; display: block; margin: 5px 0; color: #fff; font-size: 1.05rem; }
+        .timeline-desc { font-size: 0.95rem; color: #aaa; }
+        .click-hint { font-size: 0.7rem; color: var(--kpn-green); float: right; opacity: 0; transition: opacity 0.2s; }
+        .timeline-item:hover .click-hint, .badge:hover .click-hint { opacity: 1; }
+
+        /* --- Badges --- */
+        .badge-container { display: flex; flex-direction: column; gap: 12px; }
+        .badge {
+            background: #222; border: 1px solid #333; padding: 12px 18px;
+            border-radius: 4px; font-size: 0.95rem; display: flex;
+            align-items: center; justify-content: space-between;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .badge:hover { border-color: var(--kpn-green); background: rgba(0, 153, 0, 0.1); transform: translateX(5px); }
+        .badge.new { border-color: var(--kpn-green); background: rgba(0, 153, 0, 0.05); }
+        .badge-content { display: flex; align-items: center; gap: 10px; }
+        .badge-date { font-size: 0.75em; opacity: 0.6; font-family: var(--font-mono); }
+        .hobby-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+
+        /* --- Buttons --- */
+        .action-btn {
+            background: var(--kpn-green); color: white; border: none; padding: 15px 24px;
+            font-weight: bold; text-transform: uppercase; cursor: pointer; width: 100%;
+            margin-top: 25px; border-radius: 4px; transition: background 0.3s; font-size: 1rem;
+        }
+        .action-btn:hover { background: var(--kpn-light-green); }
+
+        /* --- Modal Extended --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000;
+            justify-content: center; align-items: center; backdrop-filter: blur(3px);
+        }
+        .modal-content {
+            background: var(--card-bg); border: 1px solid var(--kpn-green);
+            width: 90%; max-width: 650px; 
+            border-radius: 6px; box-shadow: 0 0 30px rgba(0, 153, 0, 0.2);
+            animation: slideDown 0.3s ease-out; display: flex; flex-direction: column;
+            max-height: 90vh; 
+        }
+        @keyframes slideDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .modal-header { background: #111; padding: 20px 25px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { color: var(--kpn-green); font-family: var(--font-mono); font-weight: bold; font-size: 1.1rem; }
+        .modal-close { background: none; border: none; color: #666; font-size: 1.5rem; cursor: pointer; }
+        .modal-close:hover { color: #fff; }
+        
+        .modal-body { 
+            padding: 25px; color: #ddd; font-size: 0.95rem; line-height: 1.6; 
+            overflow-y: auto; 
+        }
+        
+        .modal-footer { padding: 15px 25px; background: #111; border-top: 1px solid #333; text-align: right; font-family: var(--font-mono); font-size: 0.8rem; color: #555; }
+
+        /* Modal interne styling */
+        .modal-section { margin-bottom: 20px; }
+        .modal-section h4 { color: var(--kpn-green); margin: 0 0 10px 0; font-size: 0.9rem; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .modal-list { padding-left: 20px; margin: 5px 0; }
+        .modal-list li { margin-bottom: 5px; color: #ccc; }
+        .tech-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        .tech-tag { background: #222; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; color: #fff; border: 1px solid #444; font-family: var(--font-mono); }
+        .strong-text { color: #fff; font-weight: 600; }
+
+        /* --- Responsive --- */
+        @media (max-width: 900px) {
+            .dashboard-container { grid-template-columns: 1fr; }
+            .main-col { grid-template-columns: 1fr; }
+            .history-area { grid-column: span 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard-container">
+        
+        <!-- Header -->
+        <header>
+            <div class="brand">KPN <span>QRM</span> / CANDIDATE_VIEW</div>
+            <div class="system-status">
+                <span class="blink">●</span> SYSTEM ONLINE | V2026.Q2
+            </div>
+        </header>
+
+        <!-- LINKER KOLOM -->
+        <div class="sidebar-col">
+            <div class="card profile-area">
+                <div class="card-header">User Profile</div>
+                
+                <img src="KPN Groningen-Melvin Jeuring.jpg" alt="Melvin Jeuring" class="profile-photo" onerror="this.style.display='none'; document.getElementById('backup-avatar').style.display='flex'">
+                <div id="backup-avatar" class="avatar-placeholder" style="display:none;">MJ</div>
+
+                <h2 class="profile-name">Melvin Jeuring</h2>
+                <div class="profile-role">Teamleider CS ➔ Adviseur Kwaliteit</div>
+                <div class="contact-info">
+                    <div class="contact-item">📧 melvin.jeuring@kpn.com</div>
+                    <div class="contact-item">📱 +31 633023541</div>
+                    <div class="contact-item">📍 Groningen</div>
+                </div>
+                <button class="action-btn" onclick="window.print()">Print Dossier</button>
+            </div>
+
+            <!-- Opleidingen -->
+            <div class="card upgrades-area">
+                <div class="card-header">
+                    <span>Opleidingen / Cursussen</span>
+                    <span style="color:var(--kpn-green); font-size:0.7rem;">● COMPLETED</span>
+                </div>
+                
+                <div class="badge-container">
+                    <div class="badge new" onclick="openModal('course-ai')">
+                        <div class="badge-content"><span>🚀</span> <span>Data & AI Strategie</span></div>
+                        <span class="badge-date">SEP 2025</span>
+                    </div>
+                    <div class="badge new" onclick="openModal('course-gpt')">
+                        <div class="badge-content"><span>🤖</span> <span>Opleiding ChatGPT</span></div>
+                        <span class="badge-date">APR 2024</span>
+                    </div>
+                    <div class="badge" onclick="openModal('course-hbo')">
+                        <div class="badge-content"><span>🎓</span> <span>Bachelor Communicatiesystemen</span></div>
+                        <span class="badge-date">2018</span>
+                    </div>
+                </div>
+                <div class="card-header" style="margin-top:25px; margin-bottom:10px; border-top:1px solid #222; padding-top:10px; border-bottom:none;">
+                    <span>Background Processes (Hobby)</span>
+                </div>
+                <div class="hobby-grid">
+                    <div class="badge" onclick="openModal('hobby-vibe')">
+                        <div class="badge-content"><span>💻</span> <span>Vibecoding</span></div>
+                    </div>
+                    <div class="badge" onclick="openModal('hobby-news')">
+                        <div class="badge-content"><span>📰</span> <span>Tech News</span></div>
+                    </div>
+                    <div class="badge" onclick="openModal('hobby-sport')">
+                        <div class="badge-content"><span>🎾</span> <span>Padel & Gym</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RECHTER KOLOM -->
+        <div class="main-col">
+            <div class="card metrics-area">
+                <div class="card-header">Performance Metrics</div>
+                
+                <div class="skill-group">
+                    <div class="skill-label"><span>Analytisch Vermogen</span> <span>95%</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: 95%"></div></div>
+                </div>
+                
+                <div class="skill-group">
+                    <div class="skill-label"><span>Stakeholder Management</span> <span>90%</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: 90%"></div></div>
+                </div>
+
+                <div class="skill-group">
+                    <div class="skill-label"><span>Complex Problem Solving (IoT/NSSD)</span> <span>92%</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: 92%"></div></div>
+                </div>
+
+                <div class="skill-group">
+                    <div class="skill-label"><span>Ketenbewaking & Proces</span> <span>88%</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: 88%"></div></div>
+                </div>
+
+                <div class="skill-group">
+                    <div class="skill-label"><span>Coaching & Leiderschap</span> <span>94%</span></div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: 94%"></div></div>
+                </div>
+
+                <div class="skill-group">
+                    <div class="skill-label"><span>AI & Data Readiness</span> <span style="color:var(--kpn-green)">HIGH</span></div>
+                    <div class="progress-bg"><div class="progress-fill ai" id="ai-bar" style="width: 10%"></div></div>
+                    <small style="color:#666; font-size:0.75rem;">Powered by recent education & vibecoding</small>
+                </div>
+            </div>
+
+            <div class="card terminal-area">
+                <div class="card-header">Professional Summary</div>
+                <div class="terminal" id="terminal-output"></div>
+            </div>
+
+            <div class="card history-area">
+                <div class="card-header">Werkervaring</div>
+                <small style="color:#666; display:block; margin-bottom:15px;">Click entries to expand log</small>
+                
+                <div class="timeline-item" onclick="openModal('exp-teamleider')">
+                    <div class="timeline-date">2022 - HEDEN</div>
+                    <span class="timeline-title">Teamleider CS @ KPN <span class="click-hint">[VIEW LOG]</span></span>
+                    <div class="timeline-desc">
+                        HR-sturing en ontwikkeling van vakmanschap. Focus op CES, medewerkersbetrokkenheid en een efficiënt opererend team.
+                    </div>
+                </div>
+
+                <div class="timeline-item" onclick="openModal('exp-senior')">
+                    <div class="timeline-date">2021 - 2022</div>
+                    <span class="timeline-title">Senior Klantexpert NSSD & IOT <span class="click-hint">[VIEW LOG]</span></span>
+                    <div class="timeline-desc">
+                        Kwaliteitscoach. Verantwoordelijk voor 'First Time Right' analyses en vakinhoudelijke ondersteuning...
+                    </div>
+                </div>
+
+                <div class="timeline-item" onclick="openModal('exp-vamo')">
+                    <div class="timeline-date">2020 - 2021</div>
+                    <span class="timeline-title">Senior Klantexpert VAMO <span class="click-hint">[VIEW LOG]</span></span>
+                    <div class="timeline-desc">
+                        Specialist in complexe klantvragen. Hier leerde ik dat processen alleen werken als de data erachter klopt.
+                    </div>
+                </div>
+
+                <div class="timeline-item" onclick="openModal('exp-defensie')">
+                    <div class="timeline-date">2014 - 2018</div>
+                    <span class="timeline-title">Militair (Natres) @ Ministerie van Defensie <span class="click-hint">[VIEW LOG]</span></span>
+                    <div class="timeline-desc">
+                        Geweerschutter & Soldaat 1e klasse. Geleerd om onder hoge druk kalm en analytisch te blijven handelen.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL STRUCTURE -->
+    <div id="infoModal" class="modal-overlay" onclick="if(event.target === this) closeModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">MODULE TITLE</span>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">Details go here...</div>
+            <div class="modal-footer">ID: <span id="modalId">0000</span> | ENCRYPTED: NO</div>
+        </div>
+    </div>
+
+    <script>
+        // MODAL DATA
+        const modalData = {
+            'course-ai': {
+                title: 'MODULE: DATA & AI STRATEGIE',
+                body: `
+                <div class="modal-section">
+                    <h4>Omschrijving</h4>
+                    <p>Afgerond bij Vijfhart IT Opleidingen (sept 2025). Een strategische opleiding gericht op het vertalen van data-kansen naar bedrijfsresultaat.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Key Learnings</h4>
+                    <ul class="modal-list">
+                        <li>Vertalen van business doelen naar een concrete AI-roadmap.</li>
+                        <li>Implementatiestrategieën voor data-driven werken binnen teams.</li>
+                        <li>Risicoanalyse en ethiek bij AI-toepassingen.</li>
+                    </ul>
+                </div>
+                <div class="modal-section">
+                    <h4>Relevantie QRM</h4>
+                    <p>Deze kennis stelt mij in staat om niet alleen naar de kwaliteit van vandaag te kijken, maar met predictive analysis de kwaliteit van morgen te borgen.</p>
+                </div>`
+            },
+            'course-gpt': {
+                title: 'MODULE: CHATGPT PRO',
+                body: `
+                <div class="modal-section">
+                    <h4>Omschrijving</h4>
+                    <p>Afgerond bij Bitacademy (april 2024). Focus op het praktisch toepassen van Large Language Models in een zakelijke omgeving.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Competenties</h4>
+                    <ul class="modal-list">
+                        <li>Advanced Prompt Engineering voor data-analyse.</li>
+                        <li>Automatisering van rapportages en samenvattingen.</li>
+                        <li>Integratie van AI in dagelijkse workflows.</li>
+                    </ul>
+                </div>`
+            },
+            'course-hbo': {
+                title: 'MODULE: BACHELOR COMMUNICATIESYSTEMEN',
+                body: `
+                <div class="modal-section">
+                    <h4>Context</h4>
+                    <p>Hanzehogeschool Groningen (2013-2018). Propedeuse behaald.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Basis</h4>
+                    <p>Tijdens deze opleiding is mijn fundament gelegd voor systeemdenken en digitale communicatie. Ik leerde hier hoe systemen met elkaar praten en waar ruis ontstaat—kennis die ik dagelijks gebruik bij het analyseren van processen.</p>
+                </div>`
+            },
+            'hobby-vibe': {
+                title: 'BG PROCESS: VIBECODING & TOOLS',
+                body: `
+                <div class="modal-section">
+                    <h4>Activiteit</h4>
+                    <p>Proactief bouwen en experimenteren met de nieuwste AI-tools om technische concepten snel eigen te maken. Ik geloof in 'Learning by Doing'.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Active Tool Stack</h4>
+                    <p>Ik experimenteer momenteel intensief met:</p>
+                    <div class="tech-tags">
+                        <span class="tech-tag">Google AI Studio</span>
+                        <span class="tech-tag">Antigravity</span>
+                        <span class="tech-tag">GitHub Copilot</span>
+                    </div>
+                </div>
+                <div class="modal-section">
+                    <h4>Waarom dit relevant is</h4>
+                    <p>Dit toont mijn 'learning agility'. Ik wacht niet op een cursus, maar ga zelf aan de slag. Voor QRM betekent dit dat ik nieuwe technologieën snel kan adopteren en implementeren.</p>
+                </div>`
+            },
+            'hobby-news': {
+                title: 'BG PROCESS: TECH NEWS',
+                body: `<p>Dagelijkse monitoring van TechCrunch, Tweakers en AI-nieuwsbrieven. Ik fungeer vaak als filter voor mijn team: "Hebben jullie deze nieuwe ontwikkeling al gezien en wat betekent dit voor KPN?"</p>`
+            },
+            'hobby-sport': {
+                title: 'BG PROCESS: PHYSICAL MAINTENANCE',
+                body: `
+                <div class="modal-section">
+                    <h4>Activiteit</h4>
+                    <p>Padel (Competitief) & Fitness.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Mindset</h4>
+                    <p>Sport zorgt voor mentale veerkracht. Het competitieve element in Padel houdt me scherp en strategisch, terwijl de sportschool zorgt voor discipline.</p>
+                </div>`
+            },
+            'exp-teamleider': {
+                title: 'LOG: TEAMLEIDER CS GRONINGEN',
+                body: `
+                <div class="modal-section">
+                    <h4>Context</h4>
+                    <p>Verantwoordelijk voor de dagelijkse aansturing, HR-cyclus en resultaten van een team Klantexperts bij KPN Service Groningen.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Resultaten & Impact</h4>
+                    <ul class="modal-list">
+                        <li><strong>CES & Betrokkenheid:</strong> Direct bijgedragen aan een stijging in medewerkersbetrokkenheid en klanttevredenheid (CES) door focus op persoonlijk vakmanschap.</li>
+                        <li><strong>Cultuur:</strong> Transformatie geleid naar een proactieve klantcultuur waarin 'First Time Right' centraal staat.</li>
+                        <li><strong>HR Sturing:</strong> Verzuimbegeleiding en ontwikkeling van talent via intensieve coachingstrajecten.</li>
+                    </ul>
+                </div>
+                <div class="modal-section">
+                    <h4>Competenties</h4>
+                    <div class="tech-tags">
+                        <span class="tech-tag">Leiderschap</span>
+                        <span class="tech-tag">Data-driven Coaching</span>
+                        <span class="tech-tag">Verzuimmanagement</span>
+                        <span class="tech-tag">Ketenbewaking</span>
+                    </div>
+                </div>`
+            },
+            'exp-senior': {
+                title: 'LOG: SENIOR KLANTEXPERT NSSD & IOT',
+                body: `
+                <div class="modal-section">
+                    <h4>Rolomschrijving</h4>
+                    <p>Een duale rol (50/50) gericht op het coachen van collega's en het oplossen van complexe technische incidenten voor grootzakelijke klanten.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Specifieke taken</h4>
+                    <ul class="modal-list">
+                        <li><strong>NSSD (2e lijns):</strong> Oplossen van complexe mobiele netwerkverstoringen. Schakel tussen CM, ZM en interne partners.</li>
+                        <li><strong>IoT Desk:</strong> Eerste aanspreekpunt voor (inter)nationale klanten en resellers met Internet of Things oplossingen.</li>
+                        <li><strong>Coaching:</strong> Vakinhoudelijk ontwikkelen van het team om zelfredzaamheid en kwaliteit te verhogen.</li>
+                    </ul>
+                </div>
+                <div class="modal-section">
+                    <h4>Competenties</h4>
+                    <div class="tech-tags">
+                        <span class="tech-tag">Complex Incident Mgmt</span>
+                        <span class="tech-tag">IoT</span>
+                        <span class="tech-tag">Engels/Nederlands</span>
+                        <span class="tech-tag">Stakeholder Mgmt</span>
+                    </div>
+                </div>`
+            },
+            'exp-vamo': {
+                title: 'LOG: SENIOR KLANTEXPERT VAMO',
+                body: `
+                <div class="modal-section">
+                    <h4>Context</h4>
+                    <p>Specialist op het gebied van Vast-Mobiel integratie (VAMO), een technisch complex product binnen de zakelijke markt.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Impact</h4>
+                    <p>In deze rol leerde ik dat processen alleen werken als de data erachter klopt. Ik analyseerde waarom migraties misliepen en koppelde dit terug naar de ketenpartners.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Competenties</h4>
+                    <div class="tech-tags">
+                        <span class="tech-tag">Technische Analyse</span>
+                        <span class="tech-tag">Ketenprocessen</span>
+                        <span class="tech-tag">Root Cause Analysis</span>
+                    </div>
+                </div>`
+            },
+            'exp-defensie': {
+                title: 'LOG: MILITAIR (NATRES)',
+                body: `
+                <div class="modal-section">
+                    <h4>Context</h4>
+                    <p>Ministerie van Defensie, Nationale Reserve (2014-2018). Functie: Geweerschutter & Soldaat 1e klasse.</p>
+                </div>
+                <div class="modal-section">
+                    <h4>Gevormde Karakteristieken</h4>
+                    <ul class="modal-list">
+                        <li><strong>Stressbestendigheid:</strong> Geleerd om onder hoge druk kalm, analytisch en procedureel te blijven handelen.</li>
+                        <li><strong>Discipline:</strong> Afspraak is afspraak. Eigenaarschap nemen voor je taak.</li>
+                        <li><strong>Teamwerk:</strong> Blindelings vertrouwen op collega's en duidelijke communicatie in de keten.</li>
+                    </ul>
+                </div>`
+            }
+        };
+
+        function openModal(id) {
+            const modal = document.getElementById('infoModal');
+            const title = document.getElementById('modalTitle');
+            const body = document.getElementById('modalBody');
+            const modalId = document.getElementById('modalId');
+            
+            if (modalData[id]) {
+                title.innerText = modalData[id].title;
+                body.innerHTML = modalData[id].body;
+                modalId.innerText = "LOG-ID: " + Math.floor(Math.random() * 100000);
+                modal.style.display = 'flex';
+            }
+        }
+        function closeModal() { document.getElementById('infoModal').style.display = 'none'; }
+
+        // TERMINAL TEXT
+        const terminalText = [
+            "<span class='highlight'>MOTIVATIE & VISIE</span>",
+            "<br>",
+            "Als Teamleider CS combineer ik operationele ervaring met een sterke visie op data en AI.",
+            "Ik heb bewezen een proactieve klantcultuur te kunnen creëren met hoge medewerkersbetrokkenheid.",
+            "<br>",
+            "Mijn ambitie voor de rol van Adviseur Kwaliteit is helder:",
+            "Mijn analytisch en anticiperend vermogen inzetten om kwaliteit niet alleen te meten, maar voorspelbaar te maken.",
+            "De brug slaan tussen vakmanschap op de vloer en de technische mogelijkheden van morgen.",
+            "<br>",
+            "Ik ben klaar voor deze volgende stap."
+        ];
+
+        const terminalDiv = document.getElementById('terminal-output');
+        let lineIndex = 0;
+        let charIndex = 0;
+
+        function typeWriter() {
+            if (lineIndex < terminalText.length) {
+                if (charIndex === 0) {
+                   const fullLine = terminalText[lineIndex];
+                   const p = document.createElement('div');
+                   p.innerHTML = fullLine;
+                   p.style.marginBottom = "5px";
+                   terminalDiv.appendChild(p);
+                   lineIndex++;
+                   setTimeout(typeWriter, 400); 
+                }
+            } else {
+                const cursor = document.createElement('span');
+                cursor.className = 'cursor';
+                terminalDiv.appendChild(cursor);
+                animateAIBar();
+            }
+        }
+
+        function animateAIBar() {
+            setTimeout(() => { document.getElementById('ai-bar').style.width = "85%"; }, 500);
+        }
+
+        window.onload = function() {
+            typeWriter();
+            document.querySelectorAll('.progress-fill').forEach(bar => {
+                if(bar.id !== 'ai-bar') {
+                    const width = bar.style.width;
+                    bar.style.width = '0%';
+                    setTimeout(() => { bar.style.width = width; }, 200);
+                }
+            });
+        };
+    </script>
+</body>
+</html>
